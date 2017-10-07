@@ -42,11 +42,7 @@ class PascalVOC(IMDB):
         self.data_path = os.path.join(devkit_path, 'VOC' + year)
 
         self.classes = ['__background__',  # always index 0
-                        'aeroplane', 'bicycle', 'bird', 'boat',
-                        'bottle', 'bus', 'car', 'cat', 'chair',
-                        'cow', 'diningtable', 'dog', 'horse',
-                        'motorbike', 'person', 'pottedplant',
-                        'sheep', 'sofa', 'train', 'tvmonitor']
+                        'tibetan flag', 'guns','knives','not terror','islamic flag','isis flag']
         self.num_classes = len(self.classes)
         self.image_set_index = self.load_image_set_index()
         self.num_images = len(self.image_set_index)
@@ -160,15 +156,25 @@ class PascalVOC(IMDB):
         for ix, obj in enumerate(objs):
             bbox = obj.find('bndbox')
             # Make pixel indexes 0-based
-            x1 = float(bbox.find('xmin').text) - 1
-            y1 = float(bbox.find('ymin').text) - 1
-            x2 = float(bbox.find('xmax').text) - 1
-            y2 = float(bbox.find('ymax').text) - 1
+            x1 = float(bbox.find('xmin').text) 
+            y1 = float(bbox.find('ymin').text) 
+            x2 = float(bbox.find('xmax').text) 
+            if x2 >= roi_rec['width']:
+                print ("label xmax reach the image width")
+                x2 = roi_rec['width'] - 1
+            y2 = float(bbox.find('ymax').text)
+            if y2 >= roi_rec['height']:
+                print ("label ymax reach the image height")
+                print(y2)
+                print(roi_rec['height'])
+                y2 = y2 - 1
             cls = class_to_index[obj.find('name').text.lower().strip()]
             boxes[ix, :] = [x1, y1, x2, y2]
             gt_classes[ix] = cls
             overlaps[ix, cls] = 1.0
 
+        print(filename)
+        print(boxes)
         roi_rec.update({'boxes': boxes,
                         'gt_classes': gt_classes,
                         'gt_overlaps': overlaps,
