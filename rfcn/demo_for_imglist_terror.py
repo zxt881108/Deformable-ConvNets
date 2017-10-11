@@ -81,7 +81,10 @@ def demo_net(cfg,predictor, dataset, image_set,
      #   image_file = image_path_from_index(index, dataset_path, image_set)
 	image_file = index
         print("processing {}/{} image:{}".format(i, num_images, image_file))
-        im = cv2.imread('weiboimg_wordlib_0-20170927/'+ image_file)
+        im = cv2.imread(image_file)
+        if im  is None:
+            print(image_file)
+            continue
         data_batch, data_names, im_scale = generate_batch(im)
         scores, boxes, data_dict = im_detect(predictor, data_batch, data_names, im_scale, config)
         for cls in CLASSES:
