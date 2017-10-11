@@ -53,8 +53,8 @@ def image_path_from_index(index, dataset_path, image_set):
     return image_file
 
 
-def demo_net(predictor, dataset, image_set,
-             root_path, dataset_path, thresh, vis=False, vis_image_dir='vis', use_box_voting=False):
+def demo_net(cfg,predictor, dataset, image_set,
+             root_path, dataset_path, thresh, vis=False, use_box_voting=False,vis_image_dir='vis'):
     """
     generate data_batch -> im_detect -> post process
     :param predictor: Predictor
@@ -66,8 +66,8 @@ def demo_net(predictor, dataset, image_set,
     nms = py_nms_wrapper(config.TEST.NMS)
     box_voting = py_box_voting_wrapper(config.TEST.BOX_VOTING_IOU_THRESH, config.TEST.BOX_VOTING_SCORE_THRESH,
                                        with_nms=True)
-
     image_set_index_file = 'test.txt'
+    fout = open('out.txt','w')
     assert os.path.exists(image_set_index_file), image_set_index_file + ' not found'
     with open(image_set_index_file) as f:
         image_set_index = [x.strip().split(' ')[0] for x in f.readlines()]
@@ -81,7 +81,7 @@ def demo_net(predictor, dataset, image_set,
      #   image_file = image_path_from_index(index, dataset_path, image_set)
 	image_file = index
         print("processing {}/{} image:{}".format(i, num_images, image_file))
-        im = cv2.imread(image_file)
+        im = cv2.imread('weiboimg_wordlib_0-20170927/'+ image_file)
         data_batch, data_names, im_scale = generate_batch(im)
         scores, boxes, data_dict = im_detect(predictor, data_batch, data_names, im_scale, config)
         for cls in CLASSES:
@@ -101,14 +101,36 @@ def demo_net(predictor, dataset, image_set,
 
         boxes_this_image = [[]] + [all_boxes[j][i] for j in xrange(1, len(CLASSES))]
 
+        dets = []
+        for j in xrange(1, len(CLASSES)):
+            if CLASSES[j] == 'not terror':
+                continue
+            boxes  = all_boxes[j][i]
+            for box in boxes:
+                det_score = box[4]
+                if det_score > 0.95:
+                    det = dict()
+                    det['score'] = float(det_score)
+                    det['bbox'] = [float(box[0]),float(box[1]),float(box[2]),float(box[3])]
+                    det['class'] = CLASSES[j]
+
+                    dets.append(det)
+        line = {}
+        line['detections'] = dets
+        line['img'] = image_file
+        import json 
+        fout.write(json.dumps(line)+'\n')
+        print(json.dumps(line))
+
         i+=1
         if vis:
-            #vis_all_detection(data_dict['data'].asnumpy(), boxes_this_image, CLASSES, im_scale)
+            #vis_all_detection(data_dict['data'].oasnumpy(), boxes_this_image, CLASSES, im_scale)
+            vis_image_dir = 'vis'
             if not os.path.exists(vis_image_dir):
                 os.mkdir(vis_image_dir)
             result_file = os.path.join(vis_image_dir, index.strip().split('/')[-1] + '_result' + '.JPEG')
             print('results saved to %s' % result_file)
-            im = draw_all_detection(data_dict['data'].asnumpy(), boxes_this_image, CLASSES, im_scale)
+            im = draw_all_detection(data_dict[0]['data'].asnumpy(), boxes_this_image, CLASSES, im_scale,cfg)
             im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
             cv2.imwrite(result_file, im)
 
@@ -159,7 +181,7 @@ def demo_rfcn(cfg, dataset, image_set, root_path, dataset_path,
                           provide_data=[DATA_SHAPES], provide_label=[LABEL_SHAPES],
                           arg_params=arg_params, aux_params=aux_params)
 
-    demo_net(predictor, dataset, image_set,
+    demo_net(cfg,predictor, dataset, image_set,
              root_path, dataset_path, thresh, vis, use_box_voting)
 
 

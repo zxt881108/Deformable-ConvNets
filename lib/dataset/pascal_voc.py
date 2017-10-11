@@ -42,7 +42,7 @@ class PascalVOC(IMDB):
         self.data_path = os.path.join(devkit_path, 'VOC' + year)
 
         self.classes = ['__background__',  # always index 0
-                        'tibetan flag', 'guns','knives','not terror','islamic flag','isis flag']
+                        'tibetan flag', 'guns','knives','islamic flag','isis flag']
         self.num_classes = len(self.classes)
         self.image_set_index = self.load_image_set_index()
         self.num_images = len(self.image_set_index)

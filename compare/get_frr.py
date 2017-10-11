@@ -2,10 +2,10 @@ import cPickle
 CLASSES = ['__background__',  # always index 0
            'tibetan flag', 'guns','knives','not terror','islamic flag','isis flag']
 
-cache_file = 'weibo_test_detections.pkl'
+cache_file = 'v5_weibo_neg.pkl'
 
-thresh_old = 0.9
- 
+thresh_old = 0.95
+
 
 with open('test.txt') as fid:
     filenamelist = fid.readlines()
