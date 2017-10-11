@@ -81,7 +81,12 @@ def demo_net(cfg,predictor, dataset, image_set,
      #   image_file = image_path_from_index(index, dataset_path, image_set)
 	image_file = index
         print("processing {}/{} image:{}".format(i, num_images, image_file))
-        im = cv2.imread(image_file)
+        import urllib2
+        data = urllib2.urlopen(image_file.strip()).read()
+        nparr = np.fromstring(data, np.uint8)
+        im = cv2.imdecode(nparr,1)
+     #   im = cv2.imread(image_file)
+
         if im  is None:
             print(image_file)
             continue
@@ -111,7 +116,7 @@ def demo_net(cfg,predictor, dataset, image_set,
             boxes  = all_boxes[j][i]
             for box in boxes:
                 det_score = box[4]
-                if det_score > 0.95:
+                if det_score > thresh:
                     det = dict()
                     det['score'] = float(det_score)
                     det['bbox'] = [float(box[0]),float(box[1]),float(box[2]),float(box[3])]
@@ -122,8 +127,9 @@ def demo_net(cfg,predictor, dataset, image_set,
         line['detections'] = dets
         line['img'] = image_file
         import json 
-        fout.write(json.dumps(line)+'\n')
-        print(json.dumps(line))
+        if len(dets)>0:
+            fout.write(json.dumps(line)+'\n')
+            print(json.dumps(line))
 
         i+=1
         if vis:
