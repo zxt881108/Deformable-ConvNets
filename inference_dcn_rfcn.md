@@ -1,11 +1,11 @@
 ## 暴恐 + 推理流程
 1. 在mxnet环境的容器中clone如下代码。  
 `git clone https://github.com/ataraxialab/Deformable-ConvNets.git`
-设置`$(DCN_ROOT)` 和 `$(MXNET_ROOT)`路径
+设置`${DCN_ROOT}` 和 `${MXNET_ROOT}`路径
 2. 重新编译mxnet    
-`cd $(DCN_ROOT)`
+`cd ${DCN_ROOT}`
 `sh ./init.sh`
-`cp -r $(DCN_ROOT)/rfcn/operator_cxx/* $(MXNET_ROOT)/src/operator/contrib/`     
+`cp -r ${DCN_ROOT}/rfcn/operator_cxx/* ${MXNET_ROOT}/src/operator/contrib/`     
 `cd ${MXNET_ROOT}`
 `make clean`
 `make -j $(nproc) USE_OPENCV=1 USE_CUDA=1 USE_CUDA_PATH=/usr/local/cuda USE_CUDNN=1`
