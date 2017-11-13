@@ -32,7 +32,6 @@ def generate_batch(im):
     LONG_SIDE = config.SCALES[0][1]
     PIXEL_MEANS = config.network.PIXEL_MEANS
     DATA_NAMES = ['data', 'im_info']
-
     im_array, im_scale = resize(im, SHORT_SIDE, LONG_SIDE)
     im_array = transform(im_array, PIXEL_MEANS)
     im_info = np.array([[im_array.shape[2], im_array.shape[3], im_scale]], dtype=np.float32)
@@ -54,7 +53,7 @@ def image_path_from_index(index, dataset_path, image_set):
 
 
 def demo_net(cfg,predictor, dataset, image_set,
-             root_path, dataset_path, thresh, vis=False, use_box_voting=False,vis_image_dir='vis'):
+             root_path, dataset_path, thresh, vis=False, use_box_voting=False,test_file='test.txt',out_prefix='output',vis_image_dir='vis'):
     """
     generate data_batch -> im_detect -> post process
     :param predictor: Predictor
@@ -66,8 +65,10 @@ def demo_net(cfg,predictor, dataset, image_set,
     nms = py_nms_wrapper(config.TEST.NMS)
     box_voting = py_box_voting_wrapper(config.TEST.BOX_VOTING_IOU_THRESH, config.TEST.BOX_VOTING_SCORE_THRESH,
                                        with_nms=True)
-    image_set_index_file = 'test.txt'
-    fout = open('out.txt','w')
+    image_set_index_file = test_file
+    fout = open(out_prefix + '_vali.txt','w')
+    fout_score = open(out_prefix + '_vali_score.txt', 'w')
+    fout_miss = open(out_prefix + '_vali_miss.txt', 'w')
     assert os.path.exists(image_set_index_file), image_set_index_file + ' not found'
     with open(image_set_index_file) as f:
         image_set_index = [x.strip().split(' ')[0] for x in f.readlines()]
@@ -85,10 +86,12 @@ def demo_net(cfg,predictor, dataset, image_set,
         data = urllib2.urlopen(image_file.strip()).read()
         nparr = np.fromstring(data, np.uint8)
         im = cv2.imdecode(nparr,1)
-     #   im = cv2.imread(image_file)
+#        im = cv2.imread(image_file)/
 
         if im  is None:
             print(image_file)
+            fout_miss.write(image_file+'\n')
+            fout_miss.flush()
             continue
         data_batch, data_names, im_scale = generate_batch(im)
         scores, boxes, data_dict = im_detect(predictor, data_batch, data_names, im_scale, config)
@@ -98,6 +101,7 @@ def demo_net(cfg,predictor, dataset, image_set,
             cls_scores = scores[0][:, cls_ind, np.newaxis]
             keep = np.where(cls_scores >= thresh)[0]
             cls_dets = np.hstack((cls_boxes, cls_scores)).astype(np.float32)[keep, :]
+            print(nms)
             keep = nms(cls_dets)
 
             # apply box voting after nms
@@ -109,7 +113,7 @@ def demo_net(cfg,predictor, dataset, image_set,
 
         boxes_this_image = [[]] + [all_boxes[j][i] for j in xrange(1, len(CLASSES))]
 
-        dets = []
+        dets, dets_s = [], []
         for j in xrange(1, len(CLASSES)):
             if CLASSES[j] == 'not terror':
                 continue
@@ -117,19 +121,50 @@ def demo_net(cfg,predictor, dataset, image_set,
             for box in boxes:
                 det_score = box[4]
                 if det_score > thresh:
-                    det = dict()
-                    det['score'] = float(det_score)
-                    det['bbox'] = [float(box[0]),float(box[1]),float(box[2]),float(box[3])]
+                    det, det_s = dict(), dict()
+                    xmin = float(box[0])
+                    ymin = float(box[1])
+                    xmax = float(box[2])
+                    ymax = float(box[3])
+                    det['pts'] = [[xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax]]
                     det['class'] = CLASSES[j]
+                    det_s['pts'] = [[xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax]]
+                    det_s['class'] = CLASSES[j]
+                    det_s['score'] = float(det_score)
+                    #det['score'] = float(det_score)
+                    #det['bbox'] = [float(box[0]),float(box[1]),float(box[2]),float(box[3])]
+                    #det['class'] = CLASSES[j]
 
                     dets.append(det)
-        line = {}
-        line['detections'] = dets
-        line['img'] = image_file
+                    dets_s.append(det_s)
+        #line = {}
+        #line['detections'] = dets
+        #line['img'] = image_file
+
+        ress = {
+             "url": image_file,
+             "label": {"detect": {"general_d": {"bbox": dets}}},
+             "type": "image",
+             "source_url": "",
+             "ops": "download()"
+        }
+
+
+        ress_s = {
+             "url": image_file,
+             "label": {"detect": {"general_d": {"bbox": dets_s}}},
+             "type": "image",
+             "source_url": "",
+             "ops": "download()"
+        }
+
         import json 
-        if len(dets)>0:
-            fout.write(json.dumps(line)+'\n')
-            print(json.dumps(line))
+        if len(dets)>=0:
+            fout.write(json.dumps(ress)+'\n')
+            fout.flush()
+            fout_score.write(json.dumps(ress_s)+'\n')
+            fout_score.flush()
+            #print(json.dumps(ress))
 
         i+=1
         if vis:
@@ -151,23 +186,24 @@ def demo_net(cfg,predictor, dataset, image_set,
     if not os.path.exists(cache_folder):
         os.mkdir(cache_folder)
 
-    cache_file = os.path.join(cache_folder, dataset + '_' + image_set + '_detections.pkl')
+    cache_file = os.path.join(cache_folder, dataset + '_' + image_set + '_' + out_prefix + '_detections.pkl')
     with open(cache_file, 'wb') as f:
         cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)
 
 
 def demo_rfcn(cfg, dataset, image_set, root_path, dataset_path,
-              ctx, prefix, epoch, vis, has_rpn, thresh, use_box_voting):
+              ctx, prefix, epoch, vis, has_rpn, thresh, use_box_voting, test_file, out_prefix):
     if has_rpn:
         sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
         sym = sym_instance.get_symbol(cfg, is_train=False)
     else:
         sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
         sym = sym_instance.get_symbol_rcnn(cfg, is_train=False)
-
+    #sym.save('1.json')
     # load model
     arg_params, aux_params = load_param(prefix, epoch, process=True)
 
+    print(arg_params['rfcn_bbox_weight'].asnumpy().flatten()[0:10])
     # infer shape
     SHORT_SIDE = config.SCALES[0][0]
     LONG_SIDE = config.SCALES[0][1]
@@ -191,13 +227,17 @@ def demo_rfcn(cfg, dataset, image_set, root_path, dataset_path,
                           arg_params=arg_params, aux_params=aux_params)
 
     demo_net(cfg,predictor, dataset, image_set,
-             root_path, dataset_path, thresh, vis, use_box_voting)
+             root_path, dataset_path, thresh, vis, use_box_voting, test_file, out_prefix)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Test a Faster R-CNN network')
     # general
     parser.add_argument('--cfg', help='experiment configure file name', required=True, type=str)
+    parser.add_argument('--gpu', help='gpu id', required=True, type=int)
+    parser.add_argument('--epoch', help='model epoch', required=True, type=int)
+    parser.add_argument('--test_file', help='test file list', required=True, type=str)
+    parser.add_argument('--out_prefix', help='output prefix', required=True, type=str)
 
     args, rest = parser.parse_known_args()
     update_config(args.cfg)
@@ -215,14 +255,15 @@ sys.path.insert(0, os.path.join(curr_path, '../external/mxnet', config.MXNET_VER
 
 
 def main():
-    ctx = [mx.gpu(int(i)) for i in config.gpus.split(',')]
+    ctx = [mx.gpu(int(args.gpu))]
     print args
 
     logger, final_output_path = create_logger(config.output_path, args.cfg, config.dataset.test_image_set)
 
+    #arg_params, aux_params = load_param(prefix, epoch, process=False)
     demo_rfcn(config, config.dataset.dataset, config.dataset.test_image_set, config.dataset.root_path, config.dataset.dataset_path,
-              ctx, os.path.join(final_output_path, '..', '_'.join([iset for iset in config.dataset.image_set.split('+')]), config.TRAIN.model_prefix), config.TEST.test_epoch,
-              args.vis, config.TEST.HAS_RPN, args.thresh, args.use_box_voting)
+              ctx, os.path.join(final_output_path, '..', '_'.join([iset for iset in config.dataset.image_set.split('+')]), config.TRAIN.model_prefix), args.epoch,
+              args.vis, config.TEST.HAS_RPN, args.thresh, args.use_box_voting, args.test_file, args.out_prefix)
 
 
 if __name__ == '__main__':
