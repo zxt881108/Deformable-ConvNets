@@ -3,7 +3,7 @@
 `git clone https://github.com/ataraxialab/Deformable-ConvNets.git`
 2. 重新编译mxnet    
 `sh ./init,sh`
-`cp -r $(DCN_ROOT)/rfcn/operator_cxx/* $(MXNET_ROOT)/src/operator/contrib/`     
+`cp -r ${DCN_ROOT}/rfcn/operator_cxx/* ${MXNET_ROOT}/src/operator/contrib/`     
 `cd ${MXNET_ROOT}`
 `make clean && make -j $(nproc) USE_OPENCV=1 USE_CUDA=1 USE_CUDA_PATH=/usr/local/cuda USE_CUDNN=1`
 3. 准备数据和预训练模型：将暴恐数据放在`./data/terror/`目录下，改名`VOC2007`. 将预训练的resnet101模型（下载地址：`http://otr41gcz3.bkt.clouddn.com/rfcn_dcn_coco-0008.params`）放在`./model/pretrained_model/resnet_v1_101-0000.params`
