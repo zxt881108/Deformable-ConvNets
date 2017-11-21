@@ -18,6 +18,7 @@ config.symbol = ''
 config.gpus = ''
 config.CLASS_AGNOSTIC = True
 config.SCALES = [(600, 1000)]  # first is scale (the shorter side); second is max size
+config.USE_GLOBAL_CONTEXT = True
 
 # default training
 config.default = edict()

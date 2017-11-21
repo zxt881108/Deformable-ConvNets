@@ -2,7 +2,7 @@
 MXNET_VERSION: "mxnet"
 output_path: "./output/rfcn_dcn-terror"
 symbol: resnet_v1_101_rfcn_dcn
-gpus: '0,1,2'
+gpus: '0,1'
 CLASS_AGNOSTIC: true
 SCALES:
 - 600
@@ -48,7 +48,7 @@ network:
   - 32
   NUM_ANCHORS: 9
 dataset:
-  NUM_CLASSES: 21
+  NUM_CLASSES: 7
   dataset: PascalVOC
   dataset_path: "./data/terror"
   image_set: 2007_trainval
