@@ -9,6 +9,7 @@ import cPickle
 import mxnet as mx
 from utils.symbol import Symbol
 from operator_py.proposal import *
+from operator_py.roi_global_context import *
 from operator_py.proposal_target import *
 from operator_py.box_annotator_ohem import *
 
@@ -812,11 +813,19 @@ class resnet_v1_101_rfcn_dcn(Symbol):
         psroipooled_loc_rois = mx.contrib.sym.DeformablePSROIPooling(name='psroipooled_loc_rois', data=rfcn_bbox, rois=rois, trans=rfcn_bbox_offset,
                                                                      group_size=7, pooled_size=7, sample_per_part=4, no_trans=False, trans_std=0.1,
                                                                      output_dim=8, spatial_scale=0.0625, part_size=7)
+        if cfg.USE_GLOBAL_CONTEXT:
+            global_context_rois = mx.symbol.Custom(rois=rois, im_info=im_info, global_context_scale=1.2,                                              op_type='roi_global_context')
+            psroipooled_cls_rois_globalcontext =  mx.contrib.sym.DeformablePSROIPooling(name='psroipooled_cls_rois', data=rfcn_cls,
+                                                  rois=global_context_rois, trans=rfcn_cls_offset,
+                                                  group_size=7, pooled_size=7, sample_per_part=4, no_trans=False, trans_std=0.1,
+                                                  output_dim=num_classes, spatial_scale=0.0625,
+                                                  part_size=7)
+            psroipooled_cls_rois = mx.sym.elemwise_add(psroipooled_cls_rois,psroipooled_cls_rois_globalcontext)
+
         cls_score = mx.sym.Pooling(name='ave_cls_scors_rois', data=psroipooled_cls_rois, pool_type='avg', global_pool=True, kernel=(7, 7))
         bbox_pred = mx.sym.Pooling(name='ave_bbox_pred_rois', data=psroipooled_loc_rois, pool_type='avg', global_pool=True, kernel=(7, 7))
         cls_score = mx.sym.Reshape(name='cls_score_reshape', data=cls_score, shape=(-1, num_classes))
         bbox_pred = mx.sym.Reshape(name='bbox_pred_reshape', data=bbox_pred, shape=(-1, 4 * num_reg_classes))
-
         if is_train:
             if cfg.TRAIN.ENABLE_OHEM:
                 labels_ohem, bbox_weights_ohem = mx.sym.Custom(op_type='BoxAnnotatorOHEM', num_classes=num_classes,
