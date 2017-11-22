@@ -82,8 +82,9 @@ def demo_net(cfg,predictor, dataset, image_set,
      #   image_file = image_path_from_index(index, dataset_path, image_set)
 	image_file = index
         print("processing {}/{} image:{}".format(i, num_images, image_file))
-        import urllib2
-        data = urllib2.urlopen(image_file.strip()).read()
+        import urllib
+        proxies = {'http' : 'http://xsio.qiniu.io'}
+        data = urllib.urlopen(image_file.strip(),proxies=proxies).read()
         nparr = np.fromstring(data, np.uint8)
         im = cv2.imdecode(nparr,1)
 #        im = cv2.imread(image_file)/
