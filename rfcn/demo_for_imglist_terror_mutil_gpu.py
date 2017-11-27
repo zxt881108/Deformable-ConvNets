@@ -66,8 +66,8 @@ def generate_batch_V2(im,num_gpu):
         array_list.append(im_array)
         info_list.append(im_info)
 
-    data =  [[mx.nd.array(_), mx.nd.array(__)] for _ in array_list,for __ in info_list]
-    data_shapes = [[('data', _.shape), ('im_info', __.shape)] for _ in array_list,for __ in info_list]
+    data = [[mx.nd.array(_), mx.nd.array(__)] for _ in array_list,for __ in info_list]
+    data_shapes = [[('data', array.shape), ('im_info', __.shape)] for array in array_list,for __ in info_list]
     data_batch = mx.io.DataBatch(data=data, label=[None], provide_data=data_shapes, provide_label=[None])
     return data_batch, DATA_NAMES, [im_scale]
 
