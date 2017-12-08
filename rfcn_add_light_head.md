@@ -11,8 +11,8 @@
 具体包括
 
 1. 大卷积核的单方向的卷积先压缩，再展开
-        
-	 [code](https://github.com/ataraxialab/Deformable-ConvNets/blob/dev-light-head/rfcn/symbols/resnet_v1_101_rfcn_dcn.py#L794-L799) 
+
+      [code](https://github.com/ataraxialab/Deformable-ConvNets/blob/dev-light-head/rfcn/symbols/resnet_v1_101_rfcn_dcn.py#L794-L799) 
 	 
 2. 将两个纬度的卷积做一个合并
 	
