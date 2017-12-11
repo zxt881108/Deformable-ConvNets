@@ -36,7 +36,7 @@ def convert_context(params, ctx):
     return new_params
 
 
-def load_param(prefix, epoch, convert=False, ctx=None, process=False):
+def load_param(cfg,prefix, epoch, convert=False, ctx=None, process=False):
     """
     wrapper for load checkpoint
     :param prefix: Prefix of model name.
@@ -55,5 +55,16 @@ def load_param(prefix, epoch, convert=False, ctx=None, process=False):
     if process:
         tests = [k for k in arg_params.keys() if '_test' in k]
         for test in tests:
-            arg_params[test.replace('_test', '')] = arg_params.pop(test)
+            if 'weight' in test:
+                print(arg_params[test].asnumpy()[0,0,0,0:10])
+                print(arg_params[test.replace('_test','')].asnumpy()[0,0:10])
+        if cfg.USE_LIGHT_HEAD:
+            for test in tests:
+                if 'weight' in test:
+                    arg_params[test.replace('_test', '')] = mx.nd.array(arg_params.pop(test).asnumpy()[0,0,:,:]/10.0)
+                else:
+                    arg_params[test.replace('_test', '')] = arg_params.pop(test)
+        else:
+            for test in tests:
+                arg_params[test.replace('_test', '')] = arg_params.pop(test)
     return arg_params, aux_params

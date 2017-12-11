@@ -202,9 +202,9 @@ def demo_rfcn(cfg, dataset, image_set, root_path, dataset_path,
         sym = sym_instance.get_symbol_rcnn(cfg, is_train=False)
     #sym.save('1.json')
     # load model
-    arg_params, aux_params = load_param(prefix, epoch, process=True)
+    arg_params, aux_params = load_param(cfg,prefix, epoch, process=True)
 
-    print(arg_params['rfcn_bbox_weight'].asnumpy().flatten()[0:10])
+    #print(arg_params['rfcn_bbox_weight'].asnumpy().flatten()[0:10])
     # infer shape
     SHORT_SIDE = config.SCALES[0][0]
     LONG_SIDE = config.SCALES[0][1]
