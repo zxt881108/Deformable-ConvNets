@@ -9,6 +9,7 @@ import cPickle
 import mxnet as mx
 from utils.symbol import Symbol
 from operator_py.proposal import *
+from operator_py.roi_global_context import *
 from operator_py.proposal_target import *
 from operator_py.box_annotator_ohem import *
 
@@ -789,31 +790,60 @@ class resnet_v1_101_rfcn_dcn(Symbol):
                     threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
 
 
+        if cfg.USE_LIGHT_HEAD:
+            conv_new_1 = mx.sym.Convolution(data=relu1, kernel=(15, 1), pad=(7, 0), num_filter=256, name="conv_new_1",
+                                            lr_mult=3.0)
+            relu_new_1 = mx.sym.Activation(data=conv_new_1, act_type='relu', name='relu1')
+            conv_new_2 = mx.sym.Convolution(data=relu_new_1, kernel=(1, 15), pad=(0, 7), num_filter=10 * 7 * 7,
+                                            name="conv_new_2", lr_mult=3.0)
+            relu_new_2 = mx.sym.Activation(data=conv_new_2, act_type='relu', name='relu2')
+            conv_new_3 = mx.sym.Convolution(data=relu1, kernel=(1, 15), pad=(0, 7), num_filter=256, name="conv_new_3",
+                                            lr_mult=3.0)
+            relu_new_3 = mx.sym.Activation(data=conv_new_3, act_type='relu', name='relu3')
+            conv_new_4 = mx.sym.Convolution(data=relu_new_3, kernel=(15, 1), pad=(7, 0), num_filter=10 * 7 * 7,
+                                            name="conv_new_4", lr_mult=3.0)
+            relu_new_4 = mx.sym.Activation(data=conv_new_4, act_type='relu', name='relu4')
+            light_head = mx.symbol.broadcast_add(name='light_head', *[relu_new_2, relu_new_4])
+            roi_pool = mx.contrib.sym.PSROIPooling(name='roi_pool', data=light_head, rois=rois, group_size=7,
+                                                   pooled_size=7, output_dim=10, spatial_scale=0.0625)
+            fc_new_1 = mx.symbol.FullyConnected(name='fc_new_1', data=roi_pool, num_hidden=1024)
+            fc_new_1_relu = mx.sym.Activation(data=fc_new_1, act_type='relu', name='fc_new_1_relu')
+            cls_score = mx.symbol.FullyConnected(name='cls_score', data=fc_new_1_relu, num_hidden=num_classes)
+            bbox_pred = mx.symbol.FullyConnected(name='rfcn_bbox', data=fc_new_1_relu, num_hidden=num_reg_classes * 4)
+        else:
+            # conv_new_1
+            conv_new_1 = mx.sym.Convolution(data=relu1, kernel=(1, 1), num_filter=1024, name="conv_new_1", lr_mult=3.0)
+            relu_new_1 = mx.sym.Activation(data=conv_new_1, act_type='relu', name='relu1')
 
-        # conv_new_1
-        conv_new_1 = mx.sym.Convolution(data=relu1, kernel=(1, 1), num_filter=1024, name="conv_new_1", lr_mult=3.0)
-        relu_new_1 = mx.sym.Activation(data=conv_new_1, act_type='relu', name='relu1')
+            # rfcn_cls/rfcn_bbox
+            rfcn_cls = mx.sym.Convolution(data=relu_new_1, kernel=(1, 1), num_filter=7*7*num_classes, name="rfcn_cls")
+            rfcn_bbox = mx.sym.Convolution(data=relu_new_1, kernel=(1, 1), num_filter=7*7*4*num_reg_classes, name="rfcn_bbox")
+            # trans_cls / trans_cls
+            rfcn_cls_offset_t = mx.sym.Convolution(data=relu_new_1, kernel=(1, 1), num_filter=2 * 7 * 7 * num_classes, name="rfcn_cls_offset_t")
+            rfcn_bbox_offset_t = mx.sym.Convolution(data=relu_new_1, kernel=(1, 1), num_filter=7 * 7 * 2, name="rfcn_bbox_offset_t")
 
-        # rfcn_cls/rfcn_bbox
-        rfcn_cls = mx.sym.Convolution(data=relu_new_1, kernel=(1, 1), num_filter=7*7*num_classes, name="rfcn_cls")
-        rfcn_bbox = mx.sym.Convolution(data=relu_new_1, kernel=(1, 1), num_filter=7*7*4*num_reg_classes, name="rfcn_bbox")
-        # trans_cls / trans_cls
-        rfcn_cls_offset_t = mx.sym.Convolution(data=relu_new_1, kernel=(1, 1), num_filter=2 * 7 * 7 * num_classes, name="rfcn_cls_offset_t")
-        rfcn_bbox_offset_t = mx.sym.Convolution(data=relu_new_1, kernel=(1, 1), num_filter=7 * 7 * 2, name="rfcn_bbox_offset_t")
+            rfcn_cls_offset = mx.contrib.sym.DeformablePSROIPooling(name='rfcn_cls_offset', data=rfcn_cls_offset_t, rois=rois, group_size=7, pooled_size=7,
+                                                                    sample_per_part=4, no_trans=True, part_size=7, output_dim=2 * num_classes, spatial_scale=0.0625)
+            rfcn_bbox_offset = mx.contrib.sym.DeformablePSROIPooling(name='rfcn_bbox_offset', data=rfcn_bbox_offset_t, rois=rois, group_size=7, pooled_size=7,
+                                                                     sample_per_part=4, no_trans=True, part_size=7, output_dim=2, spatial_scale=0.0625)
 
-        rfcn_cls_offset = mx.contrib.sym.DeformablePSROIPooling(name='rfcn_cls_offset', data=rfcn_cls_offset_t, rois=rois, group_size=7, pooled_size=7,
-                                                                sample_per_part=4, no_trans=True, part_size=7, output_dim=2 * num_classes, spatial_scale=0.0625)
-        rfcn_bbox_offset = mx.contrib.sym.DeformablePSROIPooling(name='rfcn_bbox_offset', data=rfcn_bbox_offset_t, rois=rois, group_size=7, pooled_size=7,
-                                                                 sample_per_part=4, no_trans=True, part_size=7, output_dim=2, spatial_scale=0.0625)
+            psroipooled_cls_rois = mx.contrib.sym.DeformablePSROIPooling(name='psroipooled_cls_rois', data=rfcn_cls, rois=rois, trans=rfcn_cls_offset,
+                                                                         group_size=7, pooled_size=7, sample_per_part=4, no_trans=False, trans_std=0.1,
+                                                                         output_dim=num_classes, spatial_scale=0.0625, part_size=7)
+            psroipooled_loc_rois = mx.contrib.sym.DeformablePSROIPooling(name='psroipooled_loc_rois', data=rfcn_bbox, rois=rois, trans=rfcn_bbox_offset,
+                                                                         group_size=7, pooled_size=7, sample_per_part=4, no_trans=False, trans_std=0.1,
+                                                                         output_dim=8, spatial_scale=0.0625, part_size=7)
+            if cfg.USE_GLOBAL_CONTEXT:
+                global_context_rois = mx.symbol.Custom(rois=rois, im_info=im_info, global_context_scale=1.2,                                              op_type='roi_global_context')
+                psroipooled_cls_rois_globalcontext =  mx.contrib.sym.DeformablePSROIPooling(name='psroipooled_cls_rois', data=rfcn_cls,
+                                                      rois=global_context_rois, trans=rfcn_cls_offset,
+                                                      group_size=7, pooled_size=7, sample_per_part=4, no_trans=False, trans_std=0.1,
+                                                      output_dim=num_classes, spatial_scale=0.0625,
+                                                      part_size=7)
+                psroipooled_cls_rois = mx.sym.elemwise_add(psroipooled_cls_rois,psroipooled_cls_rois_globalcontext)
 
-        psroipooled_cls_rois = mx.contrib.sym.DeformablePSROIPooling(name='psroipooled_cls_rois', data=rfcn_cls, rois=rois, trans=rfcn_cls_offset,
-                                                                     group_size=7, pooled_size=7, sample_per_part=4, no_trans=False, trans_std=0.1,
-                                                                     output_dim=num_classes, spatial_scale=0.0625, part_size=7)
-        psroipooled_loc_rois = mx.contrib.sym.DeformablePSROIPooling(name='psroipooled_loc_rois', data=rfcn_bbox, rois=rois, trans=rfcn_bbox_offset,
-                                                                     group_size=7, pooled_size=7, sample_per_part=4, no_trans=False, trans_std=0.1,
-                                                                     output_dim=8, spatial_scale=0.0625, part_size=7)
-        cls_score = mx.sym.Pooling(name='ave_cls_scors_rois', data=psroipooled_cls_rois, pool_type='avg', global_pool=True, kernel=(7, 7))
-        bbox_pred = mx.sym.Pooling(name='ave_bbox_pred_rois', data=psroipooled_loc_rois, pool_type='avg', global_pool=True, kernel=(7, 7))
+            cls_score = mx.sym.Pooling(name='ave_cls_scors_rois', data=psroipooled_cls_rois, pool_type='avg', global_pool=True, kernel=(7, 7))
+            bbox_pred = mx.sym.Pooling(name='ave_bbox_pred_rois', data=psroipooled_loc_rois, pool_type='avg', global_pool=True, kernel=(7, 7))
         cls_score = mx.sym.Reshape(name='cls_score_reshape', data=cls_score, shape=(-1, num_classes))
         bbox_pred = mx.sym.Reshape(name='bbox_pred_reshape', data=bbox_pred, shape=(-1, 4 * num_reg_classes))
 
@@ -1007,16 +1037,31 @@ class resnet_v1_101_rfcn_dcn(Symbol):
         arg_params['res5c_branch2b_offset_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['res5c_branch2b_offset_bias'])
         arg_params['conv_new_1_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['conv_new_1_weight'])
         arg_params['conv_new_1_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['conv_new_1_bias'])
-        arg_params['rfcn_cls_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['rfcn_cls_weight'])
-        arg_params['rfcn_cls_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_cls_bias'])
-        arg_params['rfcn_bbox_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['rfcn_bbox_weight'])
-        arg_params['rfcn_bbox_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_bbox_bias'])
-        arg_params['rfcn_cls_offset_t_weight'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_cls_offset_t_weight'])
-        arg_params['rfcn_cls_offset_t_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_cls_offset_t_bias'])
-        arg_params['rfcn_bbox_offset_t_weight'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_bbox_offset_t_weight'])
-        arg_params['rfcn_bbox_offset_t_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_bbox_offset_t_bias'])
+        if cfg.USE_LIGHT_HEAD:
+            arg_params['conv_new_2_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['conv_new_2_weight'])
+            arg_params['conv_new_2_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['conv_new_2_bias'])
+            arg_params['conv_new_3_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['conv_new_3_weight'])
+            arg_params['conv_new_3_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['conv_new_3_bias'])
+            arg_params['conv_new_4_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['conv_new_4_weight'])
+            arg_params['conv_new_4_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['conv_new_4_bias'])
+            arg_params['fc_new_1_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['fc_new_1_weight'])
+            arg_params['fc_new_1_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['fc_new_1_bias'])
+            arg_params['cls_score_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['cls_score_weight'])
+            arg_params['cls_score_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['cls_score_bias'])
+            arg_params['rfcn_bbox_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['rfcn_bbox_weight'])
+            arg_params['rfcn_bbox_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_bbox_bias'])
+        else:
+            arg_params['rfcn_cls_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['rfcn_cls_weight'])
+            arg_params['rfcn_cls_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_cls_bias'])
+            arg_params['rfcn_bbox_weight'] = mx.random.normal(0, 0.01, shape=self.arg_shape_dict['rfcn_bbox_weight'])
+            arg_params['rfcn_bbox_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_bbox_bias'])
+            arg_params['rfcn_cls_offset_t_weight'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_cls_offset_t_weight'])
+            arg_params['rfcn_cls_offset_t_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_cls_offset_t_bias'])
+            arg_params['rfcn_bbox_offset_t_weight'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_bbox_offset_t_weight'])
+            arg_params['rfcn_bbox_offset_t_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rfcn_bbox_offset_t_bias'])
 
     def init_weight(self, cfg, arg_params, aux_params):
         self.init_weight_rpn(cfg, arg_params, aux_params)
         self.init_weight_rfcn(cfg, arg_params, aux_params)
+
 
