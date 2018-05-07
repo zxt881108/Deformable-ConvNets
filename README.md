@@ -130,6 +130,7 @@ git clone https://github.com/msracver/Deformable-ConvNets.git
 	git clone --recursive https://github.com/dmlc/mxnet.git
 	git checkout 998378a
 	git submodule update
+	# if it's the first time to checkout, just use: git submodule update --init --recursive
 	```
 	3.3 Compile MXNet
 	```
@@ -185,7 +186,7 @@ We provide trained deformable convnet models, including the deformable R-FCN & F
 4. To visualize the offset of deformable convolution and deformable psroipooling, run
 	```
 	python ./rfcn/deform_conv_demo.py
-	python ./rfcn/defrom_psroi_demo.py
+	python ./rfcn/deform_psroi_demo.py
 	```
 
 
